@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Management - KYRON Admin Panel</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">KYRON</div>
+                <div class="sidebar-tagline">Admin Panel</div>
+            </div>
+            <nav>
+                <ul class="sidebar-nav">
+                    <li class="nav-item"><a href="dashboard.html" class="nav-link"><span class="nav-icon">📊</span> Dashboard</a></li>
+                    <li class="nav-item"><a href="admins.html" class="nav-link active"><span class="nav-icon">👥</span> Admin Management</a></li>
+                    <li class="nav-item"><a href="users.html" class="nav-link"><span class="nav-icon">👤</span> User Management</a></li>
+                    <li class="nav-item"><a href="agent-logs.html" class="nav-link"><span class="nav-icon">🤖</span> Agent Logs</a></li>
+                    <li class="nav-item"><a href="login-logs.html" class="nav-link"><span class="nav-icon">🔐</span> Login Logs</a></li>
+                    <li class="nav-item"><a href="error-logs.html" class="nav-link"><span class="nav-icon">⚠️</span> Error Logs</a></li>
+                    <li class="nav-item"><a href="settings.html" class="nav-link"><span class="nav-icon">⚙️</span> System Settings</a></li>
+                    <li class="nav-item"><a href="#" class="nav-link" onclick="logout(); return false;"><span class="nav-icon">🚪</span> Logout</a></li>
+                </ul>
+            </nav>
+        </aside>
+        
+        <main class="main-content">
+            <div class="top-bar">
+                <div class="top-bar-left">
+                    <h2>Admin Management</h2>
+                </div>
+                <div class="top-bar-right">
+                    <button class="btn btn-primary" onclick="showCreateAdminModal()">+ Create Admin</button>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Email</th>
+                                <th>Role</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminsTableBody">
+                            <tr><td colspan="6" class="text-center">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+    
+    <!-- Create Admin Modal -->
+    <div id="createAdminModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+        <div class="card" style="max-width: 500px; width: 90%; margin: auto;">
+            <div class="card-header">
+                <div class="card-title">Create New Admin</div>
+                <button onclick="hideCreateAdminModal()" style="background: none; border: none; font-size: 24px; cursor: pointer;">×</button>
+            </div>
+            <form id="createAdminForm">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" id="adminName" required>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" id="adminEmail" required>
+                </div>
+                <div class="form-group">
+                    <label>Password</label>
+                    <input type="password" id="adminPassword" required minlength="8">
+                </div>
+                <div class="form-group">
+                    <label>Role</label>
+                    <select id="adminRole" required style="width: 100%; padding: 12px 16px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 15px; background: var(--bg-primary); color: var(--text-primary);">
+                        <option value="VIEWER">VIEWER</option>
+                        <option value="OPERATOR">OPERATOR</option>
+                        <option value="ADMIN">ADMIN</option>
+                        <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn" onclick="hideCreateAdminModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Create Admin</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/admin-auth.js"></script>
+    <script src="js/admins.js"></script>
+</body>
+</html>
+

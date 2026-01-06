@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Management - KYRON Admin Panel</title>
+    <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+    <div class="dashboard-container">
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">KYRON</div>
+                <div class="sidebar-tagline">Admin Panel</div>
+            </div>
+            <nav>
+                <ul class="sidebar-nav">
+                    <li class="nav-item"><a href="dashboard.html" class="nav-link"><span class="nav-icon">📊</span> Dashboard</a></li>
+                    <li class="nav-item"><a href="admins.html" class="nav-link"><span class="nav-icon">👥</span> Admin Management</a></li>
+                    <li class="nav-item"><a href="users.html" class="nav-link active"><span class="nav-icon">👤</span> User Management</a></li>
+                    <li class="nav-item"><a href="agent-logs.html" class="nav-link"><span class="nav-icon">🤖</span> Agent Logs</a></li>
+                    <li class="nav-item"><a href="login-logs.html" class="nav-link"><span class="nav-icon">🔐</span> Login Logs</a></li>
+                    <li class="nav-item"><a href="error-logs.html" class="nav-link"><span class="nav-icon">⚠️</span> Error Logs</a></li>
+                    <li class="nav-item"><a href="settings.html" class="nav-link"><span class="nav-icon">⚙️</span> System Settings</a></li>
+                    <li class="nav-item"><a href="#" class="nav-link" onclick="logout(); return false;"><span class="nav-icon">🚪</span> Logout</a></li>
+                </ul>
+            </nav>
+        </aside>
+        
+        <main class="main-content">
+            <div class="top-bar">
+                <div class="top-bar-left">
+                    <h2>User Management</h2>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="table-container">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Email</th>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                            <tr><td colspan="5" class="text-center">Loading...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/admin-auth.js"></script>
+    <script src="js/users.js"></script>
+</body>
+</html>
+
