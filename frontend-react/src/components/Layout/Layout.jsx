@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useQuery } from '@tanstack/react-query';
 import { profileAPI } from '../../services/api';
-import { LogOut, User, FileText, Zap, List, Home, Link2, Volume2, MessageSquare, Settings, Sparkles, Moon, Sun, Edit2, Mail, Phone, MapPin, Calendar, Shield, CreditCard, Building2, GraduationCap, X } from 'lucide-react';
+import { LogOut, User, FileText, Zap, List, Home, Link2, Volume2, MessageSquare, Settings, Sparkles, Moon, Sun, Edit2, Mail, Phone, MapPin, Calendar, Shield, CreditCard, Building2, GraduationCap, X, Terminal } from 'lucide-react';
 
 export default function Layout() {
   const { logout, isAuthenticated } = useAuth();
@@ -271,6 +271,9 @@ export default function Layout() {
               </NavLink>
               <NavLink to="/automation" icon={<Zap className="w-4 h-4" />}>
                 Automation
+              </NavLink>
+              <NavLink to="/munder-difflin" icon={<Terminal className="w-4 h-4" />}>
+                Munder Difflin
               </NavLink>
               <NavLink to="/settings" icon={<Settings className="w-4 h-4" />}>
                 Settings

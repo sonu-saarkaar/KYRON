@@ -1,6 +1,7 @@
 """
 This is the main entry point for the KYRON backend API.
 It sets up FastAPI and includes all the route modules.
+Reload: 2026-09-28T02:28:50
 """
 
 from fastapi import FastAPI, Request
@@ -22,12 +23,12 @@ def debug_log(location, message, data, hypothesis_id="A", run_id="run1"):
     }
     print(f"[DEBUG] {json.dumps(log_data)}")  # Console fallback
     try:
-        log_path = r'c:\Users\Sonu Bhai\Desktop\Project\KYRON\.cursor\debug.log'
+        log_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.debug', 'debug.log')
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(log_data) + '\n')
-    except Exception as log_err:
-        print(f"[DEBUG] Log write failed: {log_err}")
+    except Exception:
+        pass
 
 # Import existing route modules
 from auth import router as auth_router
@@ -197,6 +198,60 @@ except ImportError as e:
     # #endregion
     print(f"Warning: Could not import chat router: {e}")
 
+# Import and include Hermes routes (Skills, Memory & Cron Tasks)
+try:
+    from routes.hermes import router as hermes_router
+    from services.scheduler import scheduler as hermes_scheduler
+    app.include_router(hermes_router, prefix="/api/hermes", tags=["hermes"])
+    app.include_router(hermes_router, prefix="/api/kyron", tags=["kyron"])
+
+    @app.on_event("startup")
+    async def startup_hermes_scheduler():
+        import asyncio
+        asyncio.create_task(hermes_scheduler.start(poll_interval_seconds=10.0))
+
+    @app.on_event("shutdown")
+    def shutdown_hermes_scheduler():
+        hermes_scheduler.stop()
+except ImportError as e:
+    print(f"Warning: Could not import hermes router/scheduler: {e}")
+
+# Import and include KYRON CodeAgent routes (OpenHands selective port)
+try:
+    from routes.code_agent import router as code_agent_router
+    app.include_router(code_agent_router, prefix="/api/kyron/code-agent", tags=["code-agent"])
+except ImportError as e:
+    print(f"Warning: Could not import code_agent router: {e}")
+
+# Import and include KYRON SystemControlAgent routes (Action Layer)
+try:
+    from routes.system_control import router as system_control_router
+    app.include_router(system_control_router, prefix="/api/kyron/system-control", tags=["system-control"])
+except ImportError as e:
+    print(f"Warning: Could not import system_control router: {e}")
+
+# Import and include KYRON BrowserControlAgent routes (Universal Web Action Layer)
+try:
+    from routes.browser_control import router as browser_control_router
+    app.include_router(browser_control_router, prefix="/api/kyron/browser", tags=["browser-control"])
+except ImportError as e:
+    print(f"Warning: Could not import browser_control router: {e}")
+
+# Import and include KYRON Master Orchestrator routes
+try:
+    from routes.orchestrator import router as orchestrator_router
+    app.include_router(orchestrator_router, prefix="/api/kyron/orchestrator", tags=["master-orchestrator"])
+except ImportError as e:
+    print(f"Warning: Could not import orchestrator router: {e}")
+
+# Import and include KYRON Coding Command Center routes
+try:
+    from routes.coding import router as coding_router
+    # Notice we don't prefix here because prefix is already in routes/coding.py 
+    app.include_router(coding_router, tags=["coding-command-center"])
+except ImportError as e:
+    print(f"Warning: Could not import coding router: {e}")
+
 # Import and include agent routes (real-world execution)
 try:
     from routes.automation_agent import router as agent_router
@@ -212,6 +267,7 @@ if automation_standalone_router:
     app.include_router(automation_standalone_router, prefix="/api/automation/standalone", tags=["automation-standalone"])
 
 # Root endpoint
+# Reload trigger for voice formatter update
 @app.get("/")
 def read_root():
     # #region agent log

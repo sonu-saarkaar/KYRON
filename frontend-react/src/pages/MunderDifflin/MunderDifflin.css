@@ -1,0 +1,246 @@
+/* MunderDifflin Scoped Theme */
+.munder-difflin-container {
+  /* This completely overrides the dark theme for this specific container */
+  background-color: #f7f3eb; /* Light beige/cream */
+  color: #333;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  height: calc(100vh - 4rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.md-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e0dcd3;
+  font-size: 13px;
+}
+
+.md-main-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Left/Center - Pixel Office */
+.md-office-view {
+  flex: 1;
+  background-color: #f0ece3;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.md-office-grid {
+  flex: 1;
+  background-image: 
+    linear-gradient(#e5e0d8 1px, transparent 1px),
+    linear-gradient(90deg, #e5e0d8 1px, transparent 1px);
+  background-size: 40px 40px;
+  position: relative;
+  padding: 20px;
+}
+
+/* Office Elements (CSS representation) */
+.md-desk {
+  position: absolute;
+  width: 80px;
+  height: 60px;
+  background-color: #d2c8b8;
+  border: 2px solid #b8ab9a;
+  border-radius: 4px;
+  box-shadow: 2px 2px 0px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.md-computer {
+  width: 30px;
+  height: 20px;
+  background-color: #e5e5e5;
+  border: 2px solid #999;
+  border-radius: 2px;
+}
+
+.md-plant {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  background-color: #7b9e69;
+  border-radius: 50%;
+  border: 2px solid #5a7a4c;
+}
+
+/* Characters */
+.md-character {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  background-color: #ffb6c1;
+  border-radius: 16px;
+  border: 2px solid #e08c9e;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 12px;
+  color: white;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.md-boss {
+  background-color: #4a6fa5;
+  border-color: #2b4c7e;
+  width: 40px;
+  height: 40px;
+}
+
+.md-speech-bubble {
+  position: absolute;
+  top: -30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: white;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 10px;
+  white-space: nowrap;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  z-index: 11;
+}
+
+.md-speech-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 4px 4px 0;
+  border-style: solid;
+  border-color: white transparent transparent transparent;
+  display: block;
+  width: 0;
+}
+
+/* Bottom Strip - Workers Row */
+.md-workers-strip {
+  height: 90px;
+  background-color: #fff;
+  border-top: 1px solid #e0dcd3;
+  display: flex;
+  padding: 8px 16px;
+  gap: 12px;
+  overflow-x: auto;
+}
+
+.md-worker-card {
+  width: 200px;
+  min-width: 200px;
+  background-color: #fcfcfc;
+  border: 1px solid #e6e4df;
+  border-radius: 6px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+
+.md-worker-card.active {
+  border-color: #4a6fa5;
+  box-shadow: 0 0 0 1px #4a6fa5;
+}
+
+/* Right Panel - Command Center */
+.md-command-center {
+  width: 420px;
+  min-width: 420px;
+  background-color: #fefdfa;
+  border-left: 1px solid #e0dcd3;
+  display: flex;
+  flex-direction: column;
+}
+
+.md-cc-header {
+  padding: 12px 16px;
+  border-bottom: 1px solid #e0dcd3;
+}
+
+.md-cc-tabs-container {
+  padding: 8px 16px;
+  border-bottom: 1px solid #e0dcd3;
+}
+
+.md-tab-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.md-tab-row:last-child {
+  margin-bottom: 0;
+}
+
+.md-tab {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #666;
+  background-color: #f0ece3;
+  border: 1px solid #e0dcd3;
+  border-radius: 4px;
+  cursor: pointer;
+  text-transform: uppercase;
+  flex: 1;
+  text-align: center;
+}
+
+.md-tab.active {
+  background-color: #fff;
+  color: #333;
+  border-bottom-color: #fff;
+  box-shadow: 0 -2px 0 #4a6fa5 inset;
+}
+
+/* Terminal / Main Area */
+.md-main-area {
+  flex: 1;
+  padding: 16px;
+  overflow-y: auto;
+  background-color: #1e1e1e; /* Terminal dark bg */
+  color: #d4d4d4;
+  font-family: 'Consolas', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Queue Box (Bottom) */
+.md-queue-box {
+  padding: 12px 16px;
+  background-color: #fff;
+  border-top: 1px solid #e0dcd3;
+}
+
+.md-queue-input {
+  width: 100%;
+  padding: 8px 12px;
+  background-color: #f5f5f5;
+  border: 1px solid #e0dcd3;
+  border-radius: 4px;
+  font-size: 13px;
+  outline: none;
+  resize: none;
+}
+
+.md-queue-input:focus {
+  border-color: #4a6fa5;
+  background-color: #fff;
+}

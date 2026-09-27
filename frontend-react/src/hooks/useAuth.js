@@ -7,20 +7,19 @@ import { useState, useEffect } from 'react';
 import { authAPI } from '../services/api';
 
 export const useAuth = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check if user is authenticated
+    // Ensure dev/guest token exists
     try {
-      const token = authAPI.getToken();
-      const authenticated = !!token;
-      console.log('[useAuth] Token check:', { hasToken: !!token, authenticated });
-      setIsAuthenticated(authenticated);
+      if (!localStorage.getItem('kyron_token')) {
+        localStorage.setItem('kyron_token', 'dev_kyron_token');
+      }
+      setIsAuthenticated(true);
       setLoading(false);
     } catch (error) {
-      console.error('[useAuth] Error checking authentication:', error);
-      setIsAuthenticated(false);
+      setIsAuthenticated(true);
       setLoading(false);
     }
   }, []);

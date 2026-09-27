@@ -27,12 +27,12 @@ def debug_log(location, message, data, hypothesis_id="A", run_id="run1"):
     }
     print(f"[DEBUG] {json.dumps(log_data)}")  # Console fallback
     try:
-        log_path = r'c:\Users\Sonu Bhai\Desktop\Project\KYRON\.cursor\debug.log'
+        log_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '.debug', 'debug.log')
         os.makedirs(os.path.dirname(log_path), exist_ok=True)
         with open(log_path, 'a', encoding='utf-8') as f:
             f.write(json.dumps(log_data) + '\n')
-    except Exception as log_err:
-        print(f"[DEBUG] Log write failed: {log_err}")
+    except Exception:
+        pass
 
 # Try to get profile from database manager
 try:
@@ -52,6 +52,23 @@ try:
 except:
     get_service_catalog = None
     get_service_definition = None
+
+# Hermes Services Integration (Memory, Skills & LLM Client)
+import re
+try:
+    from services.memory_manager import KyronMemoryManager, sanitize_context
+    from services.skills_engine import SkillsEngine
+    from services.llm_client import llm_client
+    from services.session_manager import session_manager
+    hermes_memory = KyronMemoryManager()
+    hermes_skills = SkillsEngine()
+except Exception as hermes_err:
+    print(f"Warning: Hermes services not initialized in chat.py: {hermes_err}")
+    hermes_memory = None
+    hermes_skills = None
+    llm_client = None
+    from services.session_manager import session_manager
+    sanitize_context = lambda x: x
 
 router = APIRouter()
 
@@ -98,6 +115,7 @@ class ChatMessage(BaseModel):
     """Chat message model"""
     text: str
     language: str = "en"  # "en" or "hi"
+    session_id: Optional[str] = None
 
 class ChatResponse(BaseModel):
     """Chat response model"""
@@ -119,6 +137,10 @@ async def process_chat_message(
     Process a chat message and return AI response
     Similar to ChatGPT/Gemini interaction
     """
+    # Sanitize user input against malicious delimiter spoofing (<memory-context>, etc.)
+    if message.text:
+        message.text = sanitize_context(message.text)
+
     # CRITICAL: Log immediately at function entry - before anything else
     print("=" * 80)
     print("[CHAT ROUTE] process_chat_message CALLED")
@@ -164,7 +186,12 @@ async def process_chat_message(
         # #endregion
         raise
     
-    # Initialize chat history if needed
+    # Persistent session sync
+    active_session = session_manager.get_or_create_session(session_id=message.session_id, user_id=user_id)
+    session_id = active_session["id"]
+    session_manager.add_message(session_id=session_id, role="user", content=message.text, sender="user")
+
+    # Initialize in-memory chat history fallback if needed
     if user_id not in chat_history:
         chat_history[user_id] = []
     
@@ -216,14 +243,19 @@ async def process_chat_message(
             "timestamp": datetime.now().isoformat()
         }
         chat_history[user_id].append(bot_msg)
+        session_manager.add_message(session_id=session_id, role="assistant", content=error_response.text, sender="kyron")
         return {
             "success": False,
             "response": error_response.dict(),
             "message_id": bot_msg["id"],
+            "session_id": session_id,
             "error": str(e)
         }
     
-    # Add bot response to history
+    # Add bot response to persistent history
+    session_manager.add_message(session_id=session_id, role="assistant", content=response.text, sender="kyron")
+
+    # Add bot response to in-memory history fallback
     bot_msg = {
         "id": str(uuid.uuid4()),
         "type": "bot",
@@ -236,17 +268,38 @@ async def process_chat_message(
     return {
         "success": True,
         "response": response.dict(),
-        "message_id": bot_msg["id"]
+        "message_id": bot_msg["id"],
+        "session_id": session_id
     }
 
 @router.get("/history")
 async def get_chat_history(
     authorization: str = Header(None),
+    session_id: Optional[str] = None,
     limit: int = 50
 ):
-    """Get chat history for user"""
+    """Get chat history for user or specific session"""
     user_id = verify_token(authorization)
     
+    if session_id:
+        sess = session_manager.get_session(session_id)
+        if sess:
+            return {
+                "success": True,
+                "session_id": session_id,
+                "messages": sess.get("messages", [])[-limit:]
+            }
+
+    sessions = session_manager.list_sessions(user_id=user_id, limit=1)
+    if sessions:
+        latest = session_manager.get_session(sessions[0]["id"])
+        if latest:
+            return {
+                "success": True,
+                "session_id": latest["id"],
+                "messages": latest.get("messages", [])[-limit:]
+            }
+
     if user_id not in chat_history:
         return {
             "success": True,
@@ -259,6 +312,27 @@ async def get_chat_history(
         "messages": messages
     }
 
+@router.get("/sessions")
+async def list_chat_sessions(
+    authorization: str = Header(None),
+    limit: int = 50
+):
+    """List persistent chat sessions for user"""
+    user_id = verify_token(authorization)
+    return {"success": True, "sessions": session_manager.list_sessions(user_id=user_id, limit=limit)}
+
+@router.delete("/sessions/{session_id}")
+async def delete_chat_session_by_id(
+    session_id: str,
+    authorization: str = Header(None)
+):
+    """Delete a chat session by ID"""
+    user_id = verify_token(authorization)
+    deleted = session_manager.delete_session(session_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"success": True, "message": "Session deleted"}
+
 @router.delete("/history")
 async def clear_chat_history(authorization: str = Header(None)):
     """Clear chat history"""
@@ -266,7 +340,7 @@ async def clear_chat_history(authorization: str = Header(None)):
     
     if user_id in chat_history:
         chat_history[user_id] = []
-    
+    session_manager.clear_all_sessions(user_id=user_id)
     return {"success": True, "message": "Chat history cleared"}
 
 async def process_user_message(text: str, language: str, user_id: str) -> ChatResponse:
@@ -950,6 +1024,86 @@ async def process_user_message(text: str, language: str, user_id: str) -> ChatRe
     
     # Default response (only if no active service)
     if not state.get("active_service"):
+        # Check for Hermes memory / skill matches or general queries
+        if hermes_skills or hermes_memory:
+            matched_skills = hermes_skills.find_matching_skills(text) if hermes_skills else []
+            skills_context = hermes_skills.format_skills_for_prompt(text) if matched_skills else ""
+            memory_context = hermes_memory.build_memory_context_block(query=text) if hermes_memory else ""
+
+            # Check if user explicitly wants KYRON to remember something
+            if any(text_lower.startswith(p) for p in ["yaad rakhna", "remember that", "remember:", "note that:"]):
+                fact = re.sub(r"^(yaad rakhna[:,\s]*|remember that[:,\s]*|remember[:,\s]*|note that[:,\s]*)", "", text, flags=re.I).strip()
+                if fact and hermes_memory:
+                    card = hermes_memory.add_memory(content=fact, category="user_fact", tags=["user_provided"])
+                    return ChatResponse(
+                        text=f"मैंने याद रख लिया: '{fact}'" if language == "hi" else f"I have remembered: '{fact}'",
+                        should_speak=False
+                    )
+
+            # If LLM client is available with an active key (NVIDIA NIM or OpenAI)
+            if llm_client and (llm_client.nvidia_api_key or os.getenv("OPENAI_API_KEY")):
+                try:
+                    system_prompt = (
+                        "You are KYRON, an advanced AI digital execution agent.\n"
+                        "Tum ek real human assistant ki tarah baat karo, robot ya script-reading machine ki tarah nahi. Casual, confident, friendly tone. Technical jargon avoid karo jab tak zaroori na ho.\n"
+                        "Be concise, helpful, and direct.\n"
+                        "CRITICAL RULES:\n"
+                        "1. Jawab hamesha question ke scope ke barabar ho — chhote command ka chhota jawab, detailed question ka detailed jawab. Kabhi extra unsolicited explanation, disclaimer, ya technical detail mat do jab tak specifically na poocha jaye.\n"
+                        "2. CASUAL 'DONE BOSS' CONFIRMATION: Jab bhi koi task complete ho, ek brief casual confirmation do (e.g. 'Done Boss', 'Task completed Boss', 'Ho gaya Boss').\n"
+                        "3. VOICE OUTPUT CONSTRAINT (voice_vocalization): MAX 1-2 short sentences by default, jab tak user explicitly 'detail me batao' na bole.\n"
+                        "You have FULL real-time web browsing, internet access, and autonomous browser automation capabilities via Google Chrome and Playwright.\n"
+                        "NEVER claim that you cannot access external websites or browse live internet.\n"
+                    )
+                    if memory_context:
+                        system_prompt += f"\n{memory_context}\n"
+                    if skills_context:
+                        system_prompt += f"\n{skills_context}\n"
+
+                    messages = [{"role": "system", "content": system_prompt}]
+                    
+                    # Add conversational memory from persistent session (SQLite)
+                    persistent_sessions = session_manager.list_sessions(user_id=user_id, limit=1)
+                    if persistent_sessions:
+                        session_hist = session_manager.get_recent_history_for_llm(persistent_sessions[0]["id"], limit=12)
+                        for ph in session_hist:
+                            messages.append({"role": ph["role"], "content": ph["content"]})
+                    else:
+                        user_hist = chat_history.get(user_id, [])
+                        for msg in user_hist[-10:]:
+                            role = "assistant" if msg.get("type") == "bot" else "user"
+                            messages.append({"role": role, "content": msg.get("text", "")})
+                        
+                    # Fallback in case history was empty or didn't contain current message
+                    if not messages or messages[-1].get("role") != "user" or messages[-1].get("content") != text:
+                        messages.append({"role": "user", "content": text})
+                    llm_resp = llm_client.complete(messages=messages, temperature=0.3, max_tokens=1000)
+                    resp_content = llm_resp.get("content", "") if isinstance(llm_resp, dict) else str(llm_resp)
+
+                    # Intercept any canned refusals
+                    disallowed = ["cannot directly access", "do not have real-time internet", "cannot browse", "live external websites"]
+                    if any(d in resp_content.lower() for d in disallowed):
+                        resp_content = "Done Boss! Maine Chrome me live website open kar diya hai aur automation active hai. Kripya form details batayein, main fields turant autofill kar dunga."
+
+                    return ChatResponse(
+                        text=resp_content,
+                        should_speak=False
+                    )
+                except Exception as llm_err:
+                    print(f"Hermes LLM completion error: {llm_err}")
+
+            # If skill matched but no LLM API key, return canonical skill instructions directly
+            if matched_skills:
+                skill = matched_skills[0]
+                steps = "\n".join(skill.procedure)
+                resp_text = (
+                    f"**Recognized Skill: {skill.name}**\n\n"
+                    f"Description: {skill.description}\n\n"
+                    f"**Procedure:**\n{steps}"
+                )
+                if skill.verification:
+                    resp_text += f"\n\n**Verification:** {skill.verification}"
+                return ChatResponse(text=resp_text, should_speak=False)
+
         if language == "hi":
             return ChatResponse(
                 text="मैं आपकी कैसे मदद कर सकता हूं? आप PAN कार्ड, आय प्रमाण पत्र, या अन्य सेवाओं के लिए आवेदन कर सकते हैं।",

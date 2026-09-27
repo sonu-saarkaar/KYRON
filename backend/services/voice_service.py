@@ -9,6 +9,18 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import re
+
+def text_to_speech_safe(text: str) -> str:
+    """
+    Utility function to sanitize and phoneticize text before sending to TTS engine.
+    Ensures 'KYRON' is pronounced properly as 'Kaeyron'.
+    """
+    if not text:
+        return ""
+    # Replace KYRON with Kaeyron (case-insensitive) for TTS
+    return re.sub(r'\bKYRON\b', 'Kaeyron', text, flags=re.IGNORECASE)
+
 class VoiceService:
     """Voice guidance service for KYRON"""
     
@@ -60,6 +72,8 @@ class VoiceService:
         Returns:
             Operation result
         """
+        # Sanitization specifically for TTS output to fix pronunciation
+        text = text_to_speech_safe(text)
         if not self.tts_available:
             return {
                 "success": False,
