@@ -1,0 +1,20 @@
+# Core Dependencies (Required)
+fastapi>=0.128.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+pydantic>=2.12.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+email-validator>=2.1.0
+
+# Optional but recommended
+pymongo==4.6.0
+python-dotenv==1.0.0
+aiofiles==23.2.1
+
+# Note: Install optional packages separately if needed:
+# - AI Vision: pip install langchain langchain-openai openai (or langchain-google-genai google-generativeai)
+# - Playwright: pip install playwright && playwright install chromium
+# - OCR: pip install pytesseract pillow pdf2image PyPDF2
+# - Other: pip install websockets opencv-python numpy
+
