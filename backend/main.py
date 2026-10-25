@@ -230,6 +230,22 @@ try:
 except ImportError as e:
     print(f"Warning: Could not import system_control router: {e}")
 
+# Import and include Dograh Voice & Mac Control routes (Ultra-Low Latency Engine)
+try:
+    from routes.dograh import router as dograh_router
+    app.include_router(dograh_router, prefix="/api/dograh", tags=["dograh-voice-agent"])
+    app.include_router(dograh_router, prefix="/api/kyron/dograh", tags=["dograh-voice-agent"])
+except ImportError as e:
+    print(f"Warning: Could not import dograh router: {e}")
+
+# Import and include NVIDIA Brev & Agent Toolkit routes (Cloud GPU & NemoClaw/Hermes)
+try:
+    from routes.brev_nvidia import router as brev_nvidia_router
+    app.include_router(brev_nvidia_router, prefix="/api/brev", tags=["brev-nvidia-gpu"])
+    app.include_router(brev_nvidia_router, prefix="/api/kyron/brev", tags=["brev-nvidia-gpu"])
+except ImportError as e:
+    print(f"Warning: Could not import brev_nvidia router: {e}")
+
 # Import and include KYRON BrowserControlAgent routes (Universal Web Action Layer)
 try:
     from routes.browser_control import router as browser_control_router
@@ -252,6 +268,13 @@ try:
 except ImportError as e:
     print(f"Warning: Could not import coding router: {e}")
 
+# Import and include KYRON Social Automation & Live Mirror routes
+try:
+    from routes.social_automation import router as social_automation_router
+    app.include_router(social_automation_router)
+except ImportError as e:
+    print(f"Warning: Could not import social_automation router: {e}")
+
 # Import and include agent routes (real-world execution)
 try:
     from routes.automation_agent import router as agent_router
@@ -265,6 +288,13 @@ if automation_router:
 # Standalone automation (no Chrome extension required)
 if automation_standalone_router:
     app.include_router(automation_standalone_router, prefix="/api/automation/standalone", tags=["automation-standalone"])
+
+# Import and include KYRON Profile Mind, Document Vault & Call Support routes
+try:
+    from routes.profile_mind import router as profile_mind_router
+    app.include_router(profile_mind_router)
+except ImportError as e:
+    print(f"Warning: Could not import profile_mind router: {e}")
 
 # Root endpoint
 # Reload trigger for voice formatter update

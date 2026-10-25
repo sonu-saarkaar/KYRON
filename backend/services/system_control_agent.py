@@ -21,10 +21,16 @@ from typing import Dict, List, Optional, Any, Tuple
 from pathlib import Path
 import uuid
 
+import sys
 import pyautogui
 import pygetwindow as gw
 import pyperclip
-from pywinauto import Desktop
+try:
+    from pywinauto import Desktop
+except ImportError:
+    Desktop = None
+
+from services.mac_system_control import mac_system_control
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +82,21 @@ class SystemControlAgent:
     def __init__(self):
         pass
 
+    @property
+    def pending_actions(self) -> Dict[str, Any]:
+        return approval_queue.pending_actions
+
     def open_app(self, app_name: str) -> Dict[str, Any]:
         """
         Launch an application by name or common alias.
-        Supports native executables and Windows URI schemes.
+        Supports native executables on macOS and Windows.
         """
+        if sys.platform == "darwin":
+            res = mac_system_control.open_app(app_name)
+            if not res.get("success"):
+                raise SystemControlError(res.get("error", f"Could not open application '{app_name}'"))
+            return res
+
         clean_name = app_name.lower().strip()
         mapping = self.APP_MAPPINGS.get(clean_name)
 
@@ -203,7 +219,8 @@ class SystemControlAgent:
                 pyperclip.copy(text)
                 time.sleep(0.05)
                 _check_focus()
-                pyautogui.hotkey('ctrl', 'v')
+                paste_hotkey = ('command', 'v') if sys.platform == 'darwin' else ('ctrl', 'v')
+                pyautogui.hotkey(*paste_hotkey)
                 time.sleep(0.05)
             finally:
                 # restore clipboard
@@ -222,7 +239,13 @@ class SystemControlAgent:
 
     def send_keys(self, key_combo: str) -> None:
         """Sends key combinations (e.g. 'enter', 'ctrl+v', 'tab', 'esc')."""
-        keys = [k.strip().lower() for k in key_combo.split('+')]
+        raw_keys = [k.strip().lower() for k in key_combo.split('+')]
+        keys = []
+        for k in raw_keys:
+            if sys.platform == 'darwin' and k in ('ctrl', 'control'):
+                keys.append('command')
+            else:
+                keys.append(k)
         if len(keys) == 1:
             pyautogui.press(keys[0])
         else:
@@ -380,6 +403,20 @@ class SystemControlAgent:
         Executes an OS-level power command (shutdown, restart, sleep, lock).
         """
         try:
+            if sys.platform == "darwin":
+                if power_type == "lock":
+                    return mac_system_control.lock_screen()
+                elif power_type == "sleep":
+                    return mac_system_control.sleep_mac()
+                elif power_type == "shutdown":
+                    mac_system_control.run_applescript('tell application "System Events" to shut down')
+                    return {"success": True, "message": "Mac shutdown initiated."}
+                elif power_type == "restart":
+                    mac_system_control.run_applescript('tell application "System Events" to restart')
+                    return {"success": True, "message": "Mac restart initiated."}
+                else:
+                    return {"success": False, "message": f"Unknown power command: {power_type}"}
+
             if power_type == "shutdown":
                 logger.info("Executing system shutdown command...")
                 subprocess.Popen("shutdown /s /t 0", shell=True)

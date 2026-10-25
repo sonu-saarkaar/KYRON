@@ -141,7 +141,7 @@ def get_service_catalog() -> Dict[str, ServiceDefinition]:
         official_url="https://www.pan.utiitsl.com/PAN/newA.html",
         alternative_urls=[
             "https://www.pan.utiitsl.com/panonline_ipg/forms/csfPan.html/csfReGeneration",
-            "https://www.onlineservices.nsdl.com/paam/endUserRegisterContact.html",
+            "https://tinpan.proteantech.in/",
             "https://www.tin-nsdl.com/services/pan/pan.html"
         ]
     )

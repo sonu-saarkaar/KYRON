@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { Terminal, Monitor, ListTodo, HelpCircle, Zap, History, Database, Network, Activity, Wrench, Users, Plus, Mic, Send, MoreVertical, Layout, MousePointer2 } from 'lucide-react';
+import { 
+  Terminal, Monitor, ListTodo, HelpCircle, Zap, History, Database, 
+  Network, Activity, Wrench, Users, Plus, Mic, Send, MoreVertical, 
+  Layout, MousePointer2, GitBranch, Code2, CheckCircle2, AlertCircle, RefreshCw
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import api from '../../services/api';
 import './MunderDifflin.css';
 
 const MunderDifflin = () => {
@@ -12,14 +17,19 @@ const MunderDifflin = () => {
   const [backendType, setBackendType] = useState('CodeAgent');
   const [logs, setLogs] = useState([]);
   const [activeTab, setActiveTab] = useState('terminal');
+  const [isDispatching, setIsDispatching] = useState(false);
 
   // Fetch workers
   const fetchWorkers = async () => {
     try {
-      const res = await axios.get('http://localhost:8000/api/kyron/coding/workers');
+      const res = await api.get('/api/kyron/coding/workers');
       if (res.data.success) {
         setWorkers(res.data.workers);
         if (res.data.connected_repo) setConnectedRepo(res.data.connected_repo);
+        // Auto-select latest worker if none selected
+        if (res.data.workers.length > 0) {
+          setSelectedWorkerId(prev => prev || res.data.workers[0].worker_id);
+        }
       }
     } catch (err) {
       console.error("Failed to fetch workers", err);
@@ -38,14 +48,14 @@ const MunderDifflin = () => {
     if (selectedWorkerId) {
       const fetchLogs = async () => {
         try {
-          const res = await axios.get(`http://localhost:8000/api/kyron/coding/logs/${selectedWorkerId}`);
+          const res = await api.get(`/api/kyron/coding/logs/${selectedWorkerId}`);
           if (res.data.success) setLogs(res.data.logs);
         } catch (err) {
           console.error("Failed to fetch logs", err);
         }
       };
       fetchLogs();
-      interval = setInterval(fetchLogs, 2000);
+      interval = setInterval(fetchLogs, 1500);
     }
     return () => { if (interval) clearInterval(interval); };
   }, [selectedWorkerId]);
@@ -54,33 +64,38 @@ const MunderDifflin = () => {
     if (e) e.preventDefault();
     if (!repoPath) return;
     try {
-      const res = await axios.post('http://localhost:8000/api/kyron/coding/connect-project', { repo_path: repoPath });
+      const res = await api.post('/api/kyron/coding/connect-project', { repo_path: repoPath });
       if (res.data.success) {
         setConnectedRepo(res.data.repo);
         setRepoPath('');
+        toast.success(`Connected repository: ${res.data.repo}`);
       }
     } catch (err) {
-      alert("Failed to connect project: " + (err.response?.data?.detail || err.message));
+      toast.error("Failed to connect project: " + (err.response?.data?.detail || err.message));
     }
   };
 
-  const handleDispatchTask = async (e) => {
-    if (e) e.preventDefault();
-    if (!taskInput || !connectedRepo) return;
+  const handleDispatchTask = async (taskText) => {
+    const textToRun = taskText || taskInput;
+    if (!textToRun || !connectedRepo) return;
     
     try {
-      const res = await axios.post('http://localhost:8000/api/kyron/coding/dispatch', {
-        task: taskInput,
+      setIsDispatching(true);
+      const res = await api.post('/api/kyron/coding/dispatch', {
+        task: textToRun,
         backend: backendType
       });
       if (res.data.success) {
         setTaskInput('');
+        toast.success(`Task dispatched to ${backendType} worker: ${res.data.worker_id}`);
         fetchWorkers();
         setSelectedWorkerId(res.data.worker_id);
         setActiveTab('terminal');
       }
     } catch (err) {
-      alert("Failed to dispatch task: " + (err.response?.data?.detail || err.message));
+      toast.error("Failed to dispatch task: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setIsDispatching(false);
     }
   };
 
@@ -92,6 +107,13 @@ const MunderDifflin = () => {
     if (worker.status === 'done') return "done";
     return "failed";
   };
+
+  const sampleTasks = [
+    "Optimize profile mind cache latency",
+    "Build auto-recovery watchdog for socket handlers",
+    "Add unit tests for document vault resizer",
+    "Audit asynchronous thread safety in coding orchestrator"
+  ];
 
   return (
     <div className="munder-difflin-container">
@@ -108,7 +130,14 @@ const MunderDifflin = () => {
         </div>
         
         <div className="flex items-center gap-4 text-gray-500">
-          {!connectedRepo && (
+          {connectedRepo ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700 font-mono">
+              <GitBranch className="w-3.5 h-3.5 text-blue-600" />
+              <span className="font-bold">Project:</span>
+              <span className="truncate max-w-[220px]" title={connectedRepo}>{connectedRepo}</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse ml-1"></span>
+            </div>
+          ) : (
             <div className="flex items-center gap-2">
               <input 
                 type="text" 
@@ -317,32 +346,61 @@ const MunderDifflin = () => {
                   <option value="opencode">opencode</option>
                 </select>
               </div>
-              <span className="text-[10px] text-gray-400 font-medium italic">Orchestrator is busy — queue a message</span>
+              <span className="text-[10px] text-gray-400 font-medium italic">Autonomous Coding Command Center</span>
             </div>
+
+            {/* Quick Task Suggestions */}
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 custom-scrollbar">
+              <span className="text-[10px] text-gray-400 font-mono uppercase shrink-0">Quick:</span>
+              {sampleTasks.map((t, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setTaskInput(t)}
+                  className="px-2 py-0.5 rounded text-[10px] bg-white border border-gray-200 hover:border-blue-400 hover:text-blue-600 text-gray-600 whitespace-nowrap transition cursor-pointer"
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+
             <div className="flex gap-2">
               <textarea 
                 className="md-queue-input"
                 rows="2"
-                placeholder="Message or new task..."
+                placeholder="Instruct Munder coding agent (e.g., refactor, optimize, add tests)..."
                 value={taskInput}
                 onChange={(e) => setTaskInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleDispatchTask();
+                  }
+                }}
               ></textarea>
             </div>
             <div className="flex justify-between items-center mt-1">
               <div className="flex gap-2">
+                <button 
+                  type="button" 
+                  onClick={() => fetchWorkers()} 
+                  className="flex items-center gap-1 text-[11px] text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-300 px-2 py-1 rounded transition"
+                  title="Refresh workers"
+                >
+                  <RefreshCw className="w-3 h-3" /> sync
+                </button>
                 <button className="flex items-center gap-1 text-[11px] text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-300 px-2 py-1 rounded">
                   <Plus className="w-3 h-3" /> files
                 </button>
-                <button className="flex items-center gap-1 text-[11px] text-gray-600 bg-gray-100 hover:bg-gray-200 border border-gray-300 px-2 py-1 rounded">
-                  <Mic className="w-3 h-3" /> voice
-                </button>
               </div>
               <button 
-                onClick={handleDispatchTask}
-                disabled={!connectedRepo || !taskInput}
-                className="flex items-center gap-1 text-[11px] text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 px-3 py-1 rounded font-bold transition-colors shadow-sm"
+                type="button"
+                onClick={() => handleDispatchTask()}
+                disabled={!connectedRepo || !taskInput.trim() || isDispatching}
+                className="flex items-center gap-1.5 text-[11px] text-white bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 px-3.5 py-1 rounded-lg font-bold transition-colors shadow-sm cursor-pointer"
               >
-                <Send className="w-3 h-3" /> SEND
+                {isDispatching ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                <span>{isDispatching ? 'DISPATCHING...' : 'DISPATCH AGENT'}</span>
               </button>
             </div>
           </div>

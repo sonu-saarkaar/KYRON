@@ -47,8 +47,13 @@ class VoiceService:
                 self.tts_available = True
                 logger.info("TTS service initialized (gTTS)")
             except ImportError:
-                logger.warning("No TTS library available. Install pyttsx3 or gtts")
-                self.tts_available = False
+                import sys
+                if sys.platform == "darwin":
+                    self.tts_available = True
+                    logger.info("TTS service initialized (Dograh macOS Native Engine)")
+                else:
+                    logger.warning("No TTS library available. Install pyttsx3 or gtts")
+                    self.tts_available = False
         
         # Try to import STT libraries
         try:
@@ -74,11 +79,17 @@ class VoiceService:
         """
         # Sanitization specifically for TTS output to fix pronunciation
         text = text_to_speech_safe(text)
-        if not self.tts_available:
-            return {
-                "success": False,
-                "error": "Text-to-speech not available"
-            }
+
+        # On macOS, use Dograh ultra-low latency native speech
+        import sys
+        if sys.platform == "darwin":
+            try:
+                from services.dograh_voice_engine import dograh_voice_engine
+                res = dograh_voice_engine.speak_instant(text, language=language)
+                if res.get("success"):
+                    return {"success": True, "message": "Speech played successfully via Dograh engine"}
+            except Exception as e:
+                logger.debug(f"Dograh TTS fallback: {e}")
         
         try:
             if hasattr(self, 'tts_engine') and self.tts_engine:

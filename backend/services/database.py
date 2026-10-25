@@ -16,7 +16,7 @@ class DatabaseService:
     
     def __init__(self):
         """Initialize MongoDB connection"""
-        self.client = MongoClient(settings.MONGODB_URL)
+        self.client = MongoClient(settings.MONGODB_URL, serverSelectionTimeoutMS=2000)
         self.db = self.client[settings.MONGODB_DB_NAME]
         
         # Collections
@@ -28,27 +28,33 @@ class DatabaseService:
         self.system_settings = self.db.system_settings
         
         # Create indexes
-        self._create_indexes()
+        try:
+            self._create_indexes()
+        except Exception as e:
+            pass
     
     def _create_indexes(self):
         """Create database indexes for performance"""
-        # Admin indexes
-        self.admins.create_index("email", unique=True)
-        self.admins.create_index("status")
-        self.admins.create_index("role")
-        
-        # User indexes
-        self.users.create_index("email", unique=True)
-        self.users.create_index("status")
-        
-        # Log indexes
-        self.login_logs.create_index("admin_id")
-        self.login_logs.create_index("timestamp")
-        self.agent_logs.create_index("timestamp")
-        self.error_logs.create_index("timestamp")
-        
-        # System settings
-        self.system_settings.create_index("key", unique=True)
+        try:
+            # Admin indexes
+            self.admins.create_index("email", unique=True)
+            self.admins.create_index("status")
+            self.admins.create_index("role")
+            
+            # User indexes
+            self.users.create_index("email", unique=True)
+            self.users.create_index("status")
+            
+            # Log indexes
+            self.login_logs.create_index("admin_id")
+            self.login_logs.create_index("timestamp")
+            self.agent_logs.create_index("timestamp")
+            self.error_logs.create_index("timestamp")
+            
+            # System settings
+            self.system_settings.create_index("key", unique=True)
+        except Exception:
+            pass
     
     # ==================== Admin Operations ====================
     

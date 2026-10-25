@@ -34,7 +34,12 @@ GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 DEFAULT_GROQ_MODEL = "qwen/qwen3.8-27b"
 
 NVIDIA_NIM_BASE_URL = "https://integrate.api.nvidia.com/v1"
-DEFAULT_NVIDIA_MODEL = "nvidia/llama-3.1-nemotron-70b-instruct"
+DEFAULT_NVIDIA_MODEL = "nvidia/nemotron-3.5-bolt-e4b"
+NVIDIA_FALLBACK_MODELS = [
+    "nvidia/nemotron-3.5-bolt-e4b",
+    "google/diffusiongemma-26b-a4b-it",
+    "minimaxai/minimax-m3.1-flash"
+]
 
 
 class LLMClient:
@@ -146,15 +151,37 @@ class LLMClient:
         try:
             response = self.client.chat.completions.create(**call_args)
             choice = response.choices[0]
+            content = choice.message.content or getattr(choice.message, "reasoning_content", None) or ""
             return {
                 "success": True,
-                "content": choice.message.content or "",
+                "content": content,
                 "tool_calls": choice.message.tool_calls,
                 "model": response.model,
                 "provider": self.provider,
             }
         except Exception as e:
             logger.warning(f"Primary LLM ({self.provider}/{target_model}) error: {e}. Trying fallback models...")
+            # Try alternate NVIDIA NIM models
+            if self.provider == "nvidia":
+                for alt_model in NVIDIA_FALLBACK_MODELS:
+                    if alt_model == target_model:
+                        continue
+                    try:
+                        call_args["model"] = alt_model
+                        response = self.client.chat.completions.create(**call_args)
+                        choice = response.choices[0]
+                        content = choice.message.content or getattr(choice.message, "reasoning_content", None) or ""
+                        if content.strip():
+                            return {
+                                "success": True,
+                                "content": content,
+                                "tool_calls": choice.message.tool_calls,
+                                "model": response.model,
+                                "provider": "nvidia-fallback",
+                            }
+                    except Exception as fe:
+                        logger.warning(f"Alternate NVIDIA model {alt_model} failed: {fe}")
+
             # Try alternate Groq models
             if self.provider == "groq":
                 for alt_model in ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]:
@@ -216,15 +243,37 @@ class LLMClient:
         try:
             response = await self.async_client.chat.completions.create(**call_args)
             choice = response.choices[0]
+            content = choice.message.content or getattr(choice.message, "reasoning_content", None) or ""
             return {
                 "success": True,
-                "content": choice.message.content or "",
+                "content": content,
                 "tool_calls": choice.message.tool_calls,
                 "model": response.model,
                 "provider": self.provider,
             }
         except Exception as e:
             logger.warning(f"Primary async LLM ({self.provider}/{target_model}) error: {e}. Trying fallback models...")
+            # Try alternate NVIDIA NIM models
+            if self.provider == "nvidia":
+                for alt_model in NVIDIA_FALLBACK_MODELS:
+                    if alt_model == target_model:
+                        continue
+                    try:
+                        call_args["model"] = alt_model
+                        response = await self.async_client.chat.completions.create(**call_args)
+                        choice = response.choices[0]
+                        content = choice.message.content or getattr(choice.message, "reasoning_content", None) or ""
+                        if content.strip():
+                            return {
+                                "success": True,
+                                "content": content,
+                                "tool_calls": choice.message.tool_calls,
+                                "model": response.model,
+                                "provider": "nvidia-fallback",
+                            }
+                    except Exception as fe:
+                        logger.warning(f"Alternate async NVIDIA model {alt_model} failed: {fe}")
+
             # Try alternate Groq models
             if self.provider == "groq":
                 for alt_model in ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]:

@@ -42,7 +42,7 @@ class MongoDBService:
             raise ImportError("pymongo is not installed. Install it with: pip install pymongo")
         
         try:
-            self.client = MongoClient(settings.MONGODB_URL)
+            self.client = MongoClient(settings.MONGODB_URL, serverSelectionTimeoutMS=2000)
             self.db = self.client[settings.MONGODB_DB_NAME]
             
             # Collections

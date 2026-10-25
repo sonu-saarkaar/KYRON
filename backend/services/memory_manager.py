@@ -300,6 +300,10 @@ class KyronMemoryManager:
         """Retrieve all memory cards up to limit."""
         return self.search_memories(query="", limit=limit)
 
+    def list_memories(self, limit: int = 50) -> List[HermesMemoryCard]:
+        """Alias for get_all_memories."""
+        return self.get_all_memories(limit=limit)
+
     # -------------------------------------------------------------
     # Hermes Context Block Generator
     # -------------------------------------------------------------

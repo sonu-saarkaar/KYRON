@@ -131,6 +131,10 @@ class SandboxEnvironment:
                 args = ["/bin/bash", "-c", command]
 
             env = os.environ.copy()
+            # Prepend current python environment and local bin to PATH for cross-platform compatibility
+            py_bin_dir = os.path.dirname(sys.executable)
+            local_bin = os.path.expanduser("~/.local/bin")
+            env["PATH"] = f"{py_bin_dir}:{local_bin}:{env.get('PATH', '')}"
             # Ensure python unbuffered
             env["PYTHONUNBUFFERED"] = "1"
             env["PYTHONPATH"] = str(self.workspace_dir)

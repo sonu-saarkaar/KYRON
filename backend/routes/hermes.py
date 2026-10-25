@@ -19,6 +19,7 @@ from services.scheduler import HermesScheduler, ScheduledJob, scheduler
 from services.llm_client import LLMClient, llm_client
 from services.browser_control_agent import browser_control_agent
 from services.session_manager import session_manager
+from services.dograh_voice_engine import dograh_voice_engine
 
 router = APIRouter()
 
@@ -259,6 +260,22 @@ async def kyron_chat(req: KyronChatRequest):
             payload["session_title"] = curr_sess.get("title", "New Conversation")
         return payload
 
+    # 0. Profile-First Check: Always consult Asif Aslam (Sonu Sarkar)'s Master Mind first
+    from services.profile_mind_service import profile_mind_service
+    profile_check = profile_mind_service.check_profile_for_query(user_msg)
+    if profile_check.get("has_specific_answer"):
+        reply_text = profile_check["synthesized_answer"]
+        speak_out_loud(reply_text)
+        return respond({
+            "success": True,
+            "reply": reply_text,
+            "text": reply_text,
+            "response": reply_text,
+            "type": "profile_verified_response",
+            "verified_from_profile": True,
+            "profile_context": profile_check.get("profile_context")
+        }, reply_text=reply_text)
+
     # 0. Fast-path: Web URLs & Autonomous Chrome Form Automation (BookMyGadi & Web Forms)
     import re
     import time
@@ -442,26 +459,14 @@ async def kyron_chat(req: KyronChatRequest):
     has_action = any(k in user_msg_lower for k in ["banao", "chalao", "play", "sunao", "lagao", "bajao", "open", "kholo", "बनाओ", "चलाओ", "बजाओ", "सुनाओ", "खोलो"])
 
     if has_song and (has_action or len(user_msg_lower.split()) <= 4):
-        import webbrowser
-        import subprocess
+        from services.mac_system_control import mac_system_control, clean_music_query
         
-        # Popular high-energy song / YouTube Music stream
-        yt_url = "https://www.youtube.com/watch?v=jfKfPfyJRdk" # Lofi / Chill / Trending Hits
-        opened = False
-        try:
-            # Try launching chrome explicitly if available
-            subprocess.Popen(['start', 'chrome', yt_url], shell=True)
-            opened = True
-        except Exception:
-            pass
-            
-        if not opened:
-            try:
-                webbrowser.open(yt_url)
-            except Exception:
-                pass
+        song_query = clean_music_query(req.message)
+        play_res = mac_system_control.play_youtube(song_query)
+        yt_url = play_res.get("url", "https://www.youtube.com/watch?v=BSJa1UytM8w&autoplay=1")
+        song_display = play_res.get("query", song_query)
 
-        reply_text = "Done Boss! Opening Chrome and playing a song for you on YouTube right now."
+        reply_text = f"Done Boss! YouTube pe '{song_display}' play kar diya hai."
         return respond({
             "success": True,
             "reply": reply_text,
@@ -472,11 +477,11 @@ async def kyron_chat(req: KyronChatRequest):
                 "type": "media_play",
                 "platform": "YouTube",
                 "url": yt_url,
-                "title": "YouTube Music Stream"
+                "title": f"YouTube — {song_display}"
             },
             "telemetry": [{
                 "title": "Media Control",
-                "detail": "Launched Chrome with YouTube playback",
+                "detail": f"Autoplayed '{song_display}' directly on YouTube",
                 "source": "System Automation"
             }]
         }, reply_text=reply_text)
@@ -685,6 +690,27 @@ async def kyron_chat(req: KyronChatRequest):
     if memory_context:
         system_prompt += f"\nFenced Hermes Memory Recall:\n{memory_context}\n"
 
+    # Inject Master Cognitive Mind & Identity for Asif Aslam (Sonu Sarkar)
+    try:
+        from services.profile_mind_service import profile_mind_service
+        prof = profile_mind_service.get_profile()
+        ident = prof["identity"]
+        system_prompt += (
+            f"\n\nMASTER USER PROFILE & COGNITIVE MIND (CHECK FIRST BEFORE ACTING):\n"
+            f"- Full Name: {ident['full_name']} (Widely known as {ident['alias']})\n"
+            f"- Title: {ident['title']}\n"
+            f"- Ventures: {', '.join(ident['organizations'])}\n"
+            f"- Bio & Persona: {ident['bio']}\n"
+            f"- Philosophy: {', '.join(prof['personal_life']['values'])}\n"
+            f"- Daily Studies: {', '.join(prof['education_and_studies']['what_i_study_daily'][:3])}\n"
+            f"- Tech Stack: {', '.join(prof['technical_knowledge_and_skills']['frameworks_and_tools'])}\n"
+            f"- Hobbies: {', '.join(prof['hobbies_and_passions'])}\n"
+            f"- Communication Style: {prof['communication_style']['tone']}\n"
+            f"- Golden Rule: Always speak and represent Sonu's authentic voice, high agency, and direct execution.\n"
+        )
+    except Exception:
+        pass
+
     system_prompt += (
         "\nProvide helpful, crisp, highly intelligent, and direct responses. "
         "Keep responses concise, articulate, and engaging with a high-tech Jarvis command center tone."
@@ -701,13 +727,22 @@ async def kyron_chat(req: KyronChatRequest):
     # 4. Generate completion via LLM Client
     client = LLMClient()
     try:
-        result = await client.acomplete(messages=messages, temperature=0.7)
-        if result.get("success") and result.get("content"):
-            reply = result["content"]
+        wake_match = re.search(r'^(hey|hai|hello|hi|ok|okay|suno|bhai|oye|aye|ae)?\s*(kyron|kiron|kiran|karan|kayron|kairon|chiron|kyon|kyo|kyro)?[!\?\.]*$', user_msg_lower)
+        if wake_match or user_msg_lower in ["hey", "hello", "hi", "suno", "namaste", "hey kyron", "hey kyon"]:
+            reply = "Haan Boss! Bataye kya karni hai, main ready hoon."
         else:
-            reply = f"Haan Boss! '{user_msg}' samajh gaya. Bataye ispe kya action execute karni hai?"
+            # Check Dograh intent engine first for macOS commands & instant response
+            dograh_res = dograh_voice_engine.process_voice_directive(user_msg, speak_locally=True)
+            if dograh_res.get("success") and dograh_res.get("action") not in ("CONVERSATION", "FALLBACK"):
+                reply = dograh_res.get("voice_vocalization", "Command execute ho gaya Boss.")
+            else:
+                result = await client.acomplete(messages=messages, temperature=0.7)
+                if result.get("success") and result.get("content"):
+                    reply = result["content"]
+                else:
+                    reply = dograh_res.get("voice_vocalization") or "Haan Boss, bataye kya command execute karni hai? Main ready hoon."
     except Exception as e:
-        reply = f"Boss, '{user_msg}' receive ho gaya. Subsystems ready hain, bataye kya command hai?"
+        reply = "Haan Boss, bataye kya command hai? Main ready hoon."
 
     # LLM Canned Refusal Interceptor: NEVER allow model to claim it cannot browse live sites
     disallowed_refusal_patterns = [
@@ -787,6 +822,14 @@ def create_new_session(req: Optional[CreateSessionRequest] = None):
     title = req.title if req and req.title else "New Conversation"
     new_sess = session_manager.create_session(title=title)
     return {"success": True, "session": new_sess}
+
+
+@router.get("/sessions/active")
+def get_active_session():
+    """Returns or creates the active workstation chat session ID."""
+    active_id = session_manager.get_active_session_id()
+    sess = session_manager.get_session(active_id)
+    return {"success": True, "active_session_id": active_id, "session": sess}
 
 
 @router.get("/sessions/{session_id}")

@@ -25,10 +25,14 @@ class CodingWorker(BaseModel):
 class CodingOrchestrator:
     def __init__(self):
         self.workers: Dict[str, CodingWorker] = {}
-        self.connected_repo: Optional[str] = None
         self.llm = LLMClient()
-        self.worktrees_dir = Path("c:/Users/pandi/Desktop/KYRON/.worktrees")
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        self.worktrees_dir = repo_root / ".worktrees"
         self.worktrees_dir.mkdir(parents=True, exist_ok=True)
+        if (repo_root / ".git").exists():
+            self.connected_repo = str(repo_root)
+        else:
+            self.connected_repo = None
         
     def connect_project(self, repo_path: str) -> Dict[str, Any]:
         """Registers the main repository path for the Coding Command Center."""

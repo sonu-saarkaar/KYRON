@@ -18,6 +18,7 @@ async def test_ambiguous_contact_error(monkeypatch):
     Test that ambiguous contacts ('Sonu' matching multiple) throws AmbiguousContactError
     instead of pushing anything to the approval queue.
     """
+    approval_queue.clear()
     from services.system_control_agent import system_control_agent
     
     # Mocking pywinauto or search_and_open_contact directly

@@ -10,6 +10,7 @@ Follows the Hermes & CodeAgent architectural patterns:
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
+import sys
 import json
 import logging
 import re
@@ -21,6 +22,8 @@ from services.system_control_agent import (
     WindowFocusError,
     AmbiguousContactError,
 )
+from services.mac_system_control import mac_system_control
+from services.dograh_voice_engine import dograh_voice_engine
 from services.llm_client import LLMClient
 
 logger = logging.getLogger(__name__)
@@ -36,18 +39,31 @@ class ConfirmActionRequest(BaseModel):
     confirmed: bool = Field(True, description="True to confirm and send, False to reject/discard")
 
 
+class CursorActionRequest(BaseModel):
+    directive: Optional[str] = Field(None, description="Natural voice directive, e.g. 'curose uper kro' or 'duble click'")
+    action: Optional[str] = Field(None, description="Direct action: move, click, double_click, right_click, scroll, center, mouse_down, mouse_up")
+    direction: Optional[str] = Field(None, description="Direction: up, down, left, right")
+    distance: Optional[int] = Field(140, description="Pixel distance to move")
+    x: Optional[int] = None
+    y: Optional[int] = None
+
+
 @router.get("/status")
 def get_system_control_status():
     """Returns OS control subsystem status and list of open desktop windows."""
+    is_mac = sys.platform == "darwin"
     try:
-        open_windows = [w.title for w in gw.getAllWindows() if w.title and len(w.title.strip()) > 1]
+        if is_mac:
+            open_windows = mac_system_control.get_running_apps()
+        else:
+            open_windows = [w.title for w in gw.getAllWindows() if w.title and len(w.title.strip()) > 1]
     except Exception:
         open_windows = []
 
     return {
         "success": True,
-        "agent": "KYRON SystemControlAgent",
-        "desktop_platform": "Windows",
+        "agent": "KYRON SystemControlAgent (Dograh-Powered)",
+        "desktop_platform": "macOS Apple Silicon" if is_mac else "Windows",
         "open_windows_count": len(open_windows),
         "open_windows": open_windows[:15],
         "pending_actions_count": len(system_control_agent.pending_actions),
@@ -71,11 +87,20 @@ async def execute_system_command(req: ExecuteSystemCommandRequest):
 
     logger.info(f"Parsing OS directive: '{command_text}'")
 
-    # LLM Step Planning with fallback rule-based fast path
-    client = LLMClient()
-    lower = command_text.lower()
+    # Fast path for mouth/voice cursor directives (<10ms)
+    cursor_res = mac_system_control.execute_cursor_voice_directive(command_text)
+    if cursor_res:
+        logger.info(f"Executed cursor voice directive: {cursor_res}")
+        return {
+            "success": True,
+            "summary": cursor_res.get("voice_vocalization", "Cursor action executed."),
+            "voice_vocalization": cursor_res.get("voice_vocalization", "Done Boss."),
+            "requires_confirmation": False,
+            "action_data": cursor_res
+        }
 
     # Fast path for power commands
+    lower = command_text.lower()
     power_commands = {
         "shutdown": ["shutdown", "turn off", "laptop off", "band kar", "shut down", "power off"],
         "restart": ["restart", "reboot"],
@@ -95,28 +120,20 @@ async def execute_system_command(req: ExecuteSystemCommandRequest):
             }
 
     # YouTube/Song fast path
-    if "youtube" in lower or "song" in lower or "gana" in lower or "gaana" in lower:
-        import urllib.parse
-        # Extract search query
-        query = command_text.lower().replace("play", "").replace("song", "").replace("on youtube", "").replace("youtube", "").replace("mere liye", "").replace("banao", "").replace("bajao", "").replace("gana", "").replace("gaana", "").strip()
-        if not query:
-            query = "latest songs"
+    if any(k in lower for k in ["youtube", "yt", "song", "gana", "gaana", "music"]):
+        from services.mac_system_control import clean_music_query
+        query = clean_music_query(command_text)
+        res = mac_system_control.play_youtube(query)
+        clean_name = res.get("query", query)
+        logger.info(f"Autoplaying YouTube for: {clean_name} -> {res.get('url')}")
         
-        search_url = f"https://www.youtube.com/results?search_query={urllib.parse.quote(query)}"
-        logger.info(f"Opening YouTube with query: {query}")
-        
-        # We can just use os.startfile to open the default browser natively
-        import os
-        try:
-            os.startfile(search_url)
-            return {
-                "success": True,
-                "summary": f"Opening YouTube for: {query}",
-                "voice_vocalization": f"Playing {query} Boss.",
-                "requires_confirmation": False
-            }
-        except Exception as e:
-            logger.error(f"Failed to open YouTube: {e}")
+        return {
+            "success": True,
+            "summary": f"Autoplaying '{clean_name}' on YouTube",
+            "voice_vocalization": f"YouTube pe '{clean_name}' play kar rahi hoon Boss.",
+            "url": res.get("url"),
+            "requires_confirmation": False
+        }
 
     # Rule-based fast paths for standard commands
     is_whatsapp = "whatsapp" in lower
@@ -359,3 +376,73 @@ def confirm_system_action(req: ConfirmActionRequest):
     except Exception as e:
         logger.error(f"Confirmation execution error: {e}")
         raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/cursor")
+def handle_cursor_control(req: CursorActionRequest):
+    """
+    Ultra-low latency (<10ms) hands-free mouse & cursor control endpoint.
+    Accepts natural Hindi/Hinglish/English voice directives or explicit programmatic actions.
+    """
+    try:
+        # 1. Natural directive mode
+        if req.directive:
+            res = mac_system_control.execute_cursor_voice_directive(req.directive)
+            if res:
+                return {
+                    "success": True,
+                    "mode": "voice_directive",
+                    "result": res,
+                    "voice_vocalization": res.get("voice_vocalization", "Done Boss.")
+                }
+            # Fallback if directive wasn't parsed
+            return {
+                "success": False,
+                "mode": "voice_directive",
+                "message": f"Could not parse cursor directive: '{req.directive}'"
+            }
+
+        # 2. Programmatic action mode
+        action = (req.action or "move").lower().strip()
+        if action == "move":
+            direction = req.direction or "up"
+            distance = req.distance or 140
+            res = mac_system_control.cursor_move(direction=direction, distance=distance)
+            return {
+                "success": res.get("success", True),
+                "action": "move",
+                "details": res,
+                "voice_vocalization": f"Cursor {distance}px {direction} kar diya Boss."
+            }
+        elif action in ["click", "single_click"]:
+            res = mac_system_control.cursor_click(button="left", clicks=1)
+            return {"success": True, "action": "click", "details": res, "voice_vocalization": "Done Boss, clicked."}
+        elif action in ["double_click", "duble_click"]:
+            res = mac_system_control.cursor_double_click()
+            return {"success": True, "action": "double_click", "details": res, "voice_vocalization": "Done Boss, double clicked."}
+        elif action in ["right_click", "context_menu"]:
+            res = mac_system_control.cursor_right_click()
+            return {"success": True, "action": "right_click", "details": res, "voice_vocalization": "Done Boss, right click kar diya."}
+        elif action == "scroll":
+            direction = req.direction or "down"
+            res = mac_system_control.cursor_scroll(direction=direction)
+            return {"success": True, "action": "scroll", "details": res, "voice_vocalization": f"Scrolled {direction} Boss."}
+        elif action == "center":
+            res = mac_system_control.cursor_to_center()
+            return {"success": True, "action": "center", "details": res, "voice_vocalization": "Cursor center me le aaya Boss."}
+        elif action == "mouse_down":
+            res = mac_system_control.cursor_mouse_down()
+            return {"success": True, "action": "mouse_down", "details": res, "voice_vocalization": "Mouse held Boss."}
+        elif action == "mouse_up":
+            res = mac_system_control.cursor_mouse_up()
+            return {"success": True, "action": "mouse_up", "details": res, "voice_vocalization": "Mouse released Boss."}
+        elif action == "move_to" and req.x is not None and req.y is not None:
+            res = mac_system_control.cursor_move_to(req.x, req.y)
+            return {"success": True, "action": "move_to", "details": res, "voice_vocalization": f"Cursor ({req.x}, {req.y}) par move kar diya Boss."}
+        else:
+            return {"success": False, "message": f"Unsupported cursor action '{action}'."}
+
+    except Exception as e:
+        logger.error(f"Cursor control error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

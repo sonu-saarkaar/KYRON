@@ -395,5 +395,159 @@ export const systemControlAPI = {
   }
 };
 
+// KYRON Dograh Voice & Native macOS Control API
+export const dograhAPI = {
+  executeCommand: async (directive, language = 'auto') => {
+    const response = await api.post('/api/dograh/command', { directive, language });
+    return response.data;
+  },
+  speak: async (text, language = 'auto') => {
+    const response = await api.post('/api/dograh/speak', { text, language });
+    return response.data;
+  },
+  getStatus: async () => {
+    const response = await api.get('/api/dograh/status');
+    return response.data;
+  },
+  getSystemStatus: async () => {
+    const response = await api.get('/api/dograh/system');
+    return response.data;
+  },
+  executeAction: async (action, params = {}) => {
+    const response = await api.post('/api/dograh/action', { action, params });
+    return response.data;
+  }
+};
+
+// KYRON Social Automation & Live Screen Mirror API
+export const socialAPI = {
+  getState: async () => {
+    const response = await api.get('/api/kyron/social/state');
+    return response.data;
+  },
+  openWhatsApp: async () => {
+    const response = await api.post('/api/kyron/social/whatsapp/open');
+    return response.data;
+  },
+  searchAndSendWhatsApp: async (contact, message) => {
+    const response = await api.post('/api/kyron/social/whatsapp/search-and-send', { contact, message });
+    return response.data;
+  },
+  peekWhatsApp: async () => {
+    const response = await api.post('/api/kyron/social/whatsapp/peek');
+    return response.data;
+  },
+  replyWhatsApp: async (contact, message) => {
+    const response = await api.post('/api/kyron/social/whatsapp/reply', { contact, message });
+    return response.data;
+  },
+  smartReplyWhatsApp: async (contact = null) => {
+    const response = await api.post('/api/kyron/social/whatsapp/smart-reply', { contact });
+    return response.data;
+  },
+  autoReplyInstagram: async () => {
+    const response = await api.post('/api/kyron/social/instagram/auto-reply');
+    return response.data;
+  },
+  switchMirror: async (mode) => {
+    const response = await api.post('/api/kyron/social/mirror/switch', { mode });
+    return response.data;
+  },
+  getStats: async () => {
+    const response = await api.get('/api/kyron/social/stats');
+    return response.data;
+  },
+  getTaskHistory: async () => {
+    const response = await api.get('/api/kyron/social/task-history');
+    return response.data;
+  }
+};
+
+// =========================================================================
+// Profile Mind, Document Vault & Call Support Services
+// =========================================================================
+
+export const profileMindAPI = {
+  getProfile: async () => {
+    const response = await api.get('/api/kyron/profile/mind');
+    return response.data;
+  },
+  updateProfile: async (data) => {
+    const response = await api.put('/api/kyron/profile/mind', data);
+    return response.data;
+  },
+  getReadme: async () => {
+    const response = await api.get('/api/kyron/profile/mind/readme');
+    return response.data;
+  },
+  saveReadme: async (markdown) => {
+    const response = await api.post('/api/kyron/profile/mind/readme', { markdown });
+    return response.data;
+  },
+  checkProfile: async (query) => {
+    const response = await api.post('/api/kyron/profile/check', { query });
+    return response.data;
+  }
+};
+
+export const documentVaultAPI = {
+  getDocuments: async () => {
+    const response = await api.get('/api/kyron/vault/documents');
+    return response.data;
+  },
+  formatDocument: async (docType, targetWidth, targetHeight, maxSizeKB, outputFormat = 'jpeg') => {
+    const response = await api.post('/api/kyron/vault/format-doc', {
+      doc_type: docType,
+      target_width: targetWidth,
+      target_height: targetHeight,
+      max_size_kb: maxSizeKB,
+      output_format: outputFormat
+    });
+    return response.data;
+  },
+  updateDocMeta: async (docKey, updates) => {
+    const response = await api.post('/api/kyron/vault/update-doc', { doc_key: docKey, updates });
+    return response.data;
+  }
+};
+
+export const businessAPI = {
+  getSummary: async () => {
+    const response = await api.get('/api/kyron/business/summary');
+    return response.data;
+  },
+  generateCampaign: async (ventureName, topic, platform) => {
+    const response = await api.post('/api/kyron/business/generate-campaign', {
+      venture_name: ventureName,
+      topic,
+      platform
+    });
+    return response.data;
+  },
+  generateClientReply: async (clientName, inquiry, serviceType) => {
+    const response = await api.post('/api/kyron/business/reply-inquiry', {
+      client_name: clientName,
+      inquiry,
+      service_type: serviceType
+    });
+    return response.data;
+  }
+};
+
+export const callSupportAPI = {
+  getHistory: async () => {
+    const response = await api.get('/api/kyron/calls/history');
+    return response.data;
+  },
+  simulateCall: async (callerType = 'ride_booking') => {
+    const response = await api.post('/api/kyron/calls/simulate', { caller_type: callerType });
+    return response.data;
+  },
+  endCall: async () => {
+    const response = await api.post('/api/kyron/calls/end');
+    return response.data;
+  }
+};
+
 export default api;
 

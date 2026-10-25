@@ -19,6 +19,7 @@ Tests:
 import sys
 import os
 import asyncio
+import pytest
 from pathlib import Path
 
 # Add backend directory to sys.path
@@ -132,6 +133,7 @@ def test_memory_context_fencing():
     print(f" [PASS] Sanitization stripped fake prompt injection: '{sanitized}'")
 
 
+@pytest.mark.asyncio
 async def test_cron_scheduler():
     print("\n--- [TEST 3] Hermes Cron Scheduler (Short Interval Verification) ---")
     test_cron_dir = backend_dir / "storage" / "test_cron"
@@ -173,6 +175,7 @@ def test_nvidia_nim_schema_sanitization():
     print(" [PASS] NVIDIA NIM ToolMessage strictly sanitized (disallowed keys stripped successfully).")
 
 
+@pytest.mark.asyncio
 async def test_hermes_routes_and_chat_integration():
     print("\n--- [TEST 5] Hermes REST Endpoints & Chat Fallback Routing ---")
     from routes.hermes import (

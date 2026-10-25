@@ -46,6 +46,7 @@ class SessionManager:
             self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
         self._lock = threading.Lock()
+        self._live_events: List[Dict[str, Any]] = []
         self._init_database()
         self._initialized = True
 
@@ -297,6 +298,93 @@ class SessionManager:
                 cur = conn.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
                 conn.commit()
                 return cur.rowcount > 0
+
+    def get_active_session_id(self, user_id: str = "default_user") -> str:
+        """Get the most recently updated session ID for user, or create one."""
+        sessions = self.list_sessions(user_id=user_id, limit=1)
+        if sessions and len(sessions) > 0:
+            return sessions[0]["id"]
+        new_sess = self.create_session(user_id=user_id, title="Mac Workstation")
+        return new_sess["id"]
+
+    def record_spoken_action(
+        self,
+        session_id: Optional[str] = None,
+        command: Optional[str] = None,
+        vocalization: str = "",
+        action_type: Optional[str] = None,
+        result: Optional[Dict[str, Any]] = None,
+        spoken_by_dograh: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Records spoken directives and KYRON responses into the active persistent session
+        and pushes to live activity ring-buffer so frontend chat room mirrors all audio/actions.
+        """
+        sid = session_id or self.get_active_session_id()
+
+        # 1. Record user command if present
+        if command and command.strip():
+            self.add_message(
+                session_id=sid,
+                role="user",
+                sender="user",
+                content=command.strip()
+            )
+
+        # 2. Record bot spoken response with full action metadata
+        act_meta = {
+            "action": action_type or "SPOKEN_RESPONSE",
+            "actionName": action_type or "SPOKEN_RESPONSE",
+            "result": result or {},
+            "spoken_by_dograh": spoken_by_dograh,
+            "spoken_at": datetime.now().isoformat()
+        }
+        bot_msg = self.add_message(
+            session_id=sid,
+            role="assistant",
+            sender="kyron",
+            content=vocalization or "Directive executed.",
+            metadata=act_meta
+        )
+
+        # 3. Add to live events ring buffer
+        with self._lock:
+            event_obj = {
+                "id": bot_msg["id"],
+                "session_id": sid,
+                "command": command,
+                "text": vocalization,
+                "action": action_type or "SPOKEN_RESPONSE",
+                "result": result or {},
+                "timestamp": datetime.now().isoformat()
+            }
+            self._live_events.append(event_obj)
+            if len(self._live_events) > 100:
+                self._live_events.pop(0)
+
+        return bot_msg
+
+    def record_speech(
+        self,
+        text: str,
+        session_id: Optional[str] = None,
+        action_type: str = "SPEECH",
+        result: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Convenience recorder for standalone speech syntheses."""
+        return self.record_spoken_action(
+            session_id=session_id,
+            command=None,
+            vocalization=text,
+            action_type=action_type,
+            result=result,
+            spoken_by_dograh=True
+        )
+
+    def get_live_events(self, limit: int = 50) -> List[Dict[str, Any]]:
+        """Retrieve recent spoken activity events for frontend streaming."""
+        with self._lock:
+            return list(self._live_events[-limit:])
 
     def clear_all_sessions(self, user_id: str = "default_user") -> bool:
         """Delete all sessions for a user."""

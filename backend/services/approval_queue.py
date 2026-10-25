@@ -1,3 +1,4 @@
+import sys
 import asyncio
 import subprocess
 import logging
@@ -24,16 +25,21 @@ class ApprovalQueueManager:
             # Escape single quotes
             message = message.replace("'", "")
             title = title.replace("'", "")
-            ps_script = f"""
-            [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
-            [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
-            $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-            $template = "<toast activationType='protocol' launch='http://localhost:3000/?action_id={action_id}'><visual><binding template='ToastText02'><text id='1'>{title}</text><text id='2'>{message}</text></binding></visual></toast>"
-            $xml.LoadXml($template)
-            $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
-            [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("KYRON AGI").Show($toast)
-            """
-            subprocess.Popen(["powershell", "-Command", ps_script], creationflags=subprocess.CREATE_NO_WINDOW)
+            if sys.platform == "win32":
+                ps_script = f"""
+                [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+                [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+                $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
+                $template = "<toast activationType='protocol' launch='http://localhost:3000/?action_id={action_id}'><visual><binding template='ToastText02'><text id='1'>{title}</text><text id='2'>{message}</text></binding></visual></toast>"
+                $xml.LoadXml($template)
+                $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
+                [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("KYRON AGI").Show($toast)
+                """
+                creationflags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                subprocess.Popen(["powershell", "-Command", ps_script], creationflags=creationflags)
+            elif sys.platform == "darwin":
+                apple_script = f'display notification "{message}" with title "{title}"'
+                subprocess.Popen(["osascript", "-e", apple_script])
         except Exception as e:
             logger.error(f"Failed to show toast notification: {e}")
 
@@ -52,7 +58,12 @@ class ApprovalQueueManager:
             "created_at": time.time()
         }
         self.pending_actions[action_id] = action
-        self.events[action_id] = asyncio.Event()
+        try:
+            self.events[action_id] = asyncio.Event()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self.events[action_id] = asyncio.Event()
         logger.info(f"Registered pending {agent_type} action: {action_id}")
         
         # OS Notification for off-UI awareness (especially cron jobs)
@@ -80,6 +91,12 @@ class ApprovalQueueManager:
             action["status"] = resolution
             return action
         raise ValueError(f"Action {action_id} not found in approval queue.")
+
+    def clear(self):
+        """Clears all pending actions and events."""
+        self.pending_actions.clear()
+        self.events.clear()
+        self.resolutions.clear()
 
     async def wait_for_resolution(self, action_id: str) -> str:
         """Wait for an action to be resolved and return the resolution string."""

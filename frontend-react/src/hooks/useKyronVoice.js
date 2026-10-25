@@ -10,7 +10,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
  * - Windows TTS Voice/Lang synchronization (prevents SAPI silent drop)
  */
 
-const WAKE_REGEX = /\b(hey|hai|hello|hi|ok|okay|suno|bhai|oye|aye)?\s*(kyron|kiron|kiran|karan|kayron|kairon|chiron)\b/i;
+const WAKE_REGEX = /\b(hey|hai|hello|hi|ok|okay|suno|bhai|oye|aye|ae|arre)?\s*(kyron|kiron|kiran|karan|kayron|kairon|chiron|kyon|kyo|kyro|kyrun|kyran)\b/i;
 
 function levenshtein(a, b) {
   if (a.length === 0) return b.length;
@@ -40,8 +40,11 @@ function isFuzzyWakeWord(text) {
 
   const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/);
   for (const word of words) {
+    if (word === 'kyon' || word === 'kyo' || word === 'kyro') {
+      return true;
+    }
     // Only check words starting with k, c, q to avoid false matches on random English/Hindi words
-    if (/^[kcq]/.test(word) && word.length >= 4 && word.length <= 7) {
+    if (/^[kcq]/.test(word) && word.length >= 3 && word.length <= 7) {
       if (
         levenshtein(word, 'kyron') <= 1 ||
         levenshtein(word, 'kiron') <= 1 ||
@@ -108,6 +111,41 @@ function isKyronEcho(candidateText, recentPhrases) {
   return false;
 }
 
+/**
+ * Phonetic STT error cleaner for Indian English / Hindi speech.
+ * Fixes mistranscriptions like "panka bana sakte ho" -> "pan card bana sakte ho".
+ */
+export function normalizeSpeechPhonetics(text) {
+  if (!text) return '';
+  let cleaned = text;
+
+  // 1. PAN Card phonetic mishearings: "panka bana", "pan ka bana", "pan cake", "pen card", "pancard"
+  cleaned = cleaned.replace(/\b(panka|pan\s*ka|pan\s*cake|pen\s*card|pencard|pankard)\b(?=.*?\b(bana|banao|banwa|apply|chahiye|sakte|sakta|karo|banaoge|banwana))/gi, 'pan card');
+  cleaned = cleaned.replace(/\b(mere liye\s+)?(panka|pan\s*ka|pan\s*cake)\b(?=\s*(bana|chahiye|apply|banao))/gi, 'pan card');
+  cleaned = cleaned.replace(/\b(panka|pan\s*ka)\b/gi, 'pan card');
+
+  // 2. Passport phonetic mishearings
+  cleaned = cleaned.replace(/\b(pasport|pass\s*port|passpot|pasfort)\b/gi, 'passport');
+
+  // 3. Ticket phonetic mishearings
+  cleaned = cleaned.replace(/\b(tikkat|tikat|tikit)\b/gi, 'ticket');
+
+  // 4. WhatsApp phonetic mishearings
+  cleaned = cleaned.replace(/\b(watsapp|watsap|whatsap)\b/gi, 'whatsapp');
+
+  // 5. Mouth / Voice Cursor Control phonetic mishearings
+  cleaned = cleaned.replace(/\b(curose|curser|kursor|kursar|courser|coursor|cousor)\b/gi, 'cursor');
+  cleaned = cleaned.replace(/\b(uper|uppar)\b/gi, 'upar');
+  cleaned = cleaned.replace(/\b(neeche|neche)\b/gi, 'niche');
+  cleaned = cleaned.replace(/\b(duble|doble)\b/gi, 'double');
+  cleaned = cleaned.replace(/\b(bayein|baayein|baye|baaye)\b/gi, 'left');
+  cleaned = cleaned.replace(/\b(daayein|dayein|daye|daaye)\b/gi, 'right');
+  cleaned = cleaned.replace(/\b(clik|clck)\b/gi, 'click');
+  cleaned = cleaned.replace(/\b(kro|kroo)\b/gi, 'karo');
+
+  return cleaned;
+}
+
 export function useKyronVoice({
   onDirectiveSubmit,
   onTranscriptChange,
@@ -141,6 +179,7 @@ export function useKyronVoice({
   const latestTranscriptRef = useRef('');
   const hasUserInteractedRef = useRef(false);
   const recentSpokenPhrasesRef = useRef([]);
+  const lastSubmittedPhraseRef = useRef({ text: '', time: 0 });
 
   // Synchronized callback refs
   const onDirectiveSubmitRef = useRef(onDirectiveSubmit);
@@ -300,7 +339,7 @@ export function useKyronVoice({
     window.__kyronActiveUtterance = utterance;
 
     utterance.rate = 1.0;
-    utterance.pitch = 1.0;
+    utterance.pitch = 1.05; // Slightly elevated pleasant female pitch
 
     const selectVoice = () => {
       const voices = window.speechSynthesis.getVoices();
@@ -309,18 +348,37 @@ export function useKyronVoice({
         return;
       }
 
+      // Explicitly ban all male and legacy robotic voices (Lekha, etc.)
+      const bannedVoices = [
+        'male', 'aman', 'rishi', 'alex', 'fred', 'daniel', 'albert', 'george',
+        'david', 'mark', 'ravi', 'reed', 'rocko', 'eddy', 'ralph', 'junior',
+        'jester', 'grandpa', 'bad news', 'bahh', 'bells', 'boing', 'bubbles',
+        'cellos', 'wobble', 'zarvox', 'trinoids', 'organ', 'lekha'
+      ];
+
+      const isBanned = (v) => {
+        const name = (v.name || '').toLowerCase();
+        return bannedVoices.some((m) => name.includes(m));
+      };
+
+      const naturalFemaleOnly = voices.filter((v) => !isBanned(v));
+      const candidates = naturalFemaleOnly.length > 0 ? naturalFemaleOnly : voices;
+
+      // Priority: Tara (Apple Siri Natural Female) is the absolute #1 real human voice
       const preferred =
-        voices.find((v) => v.lang === 'en-IN') ||
-        voices.find((v) => v.lang === 'hi-IN' || v.lang.startsWith('hi')) ||
-        voices.find((v) =>
-          v.name.includes('Natural') ||
-          v.name.includes('Google UK English Male') ||
-          v.name.includes('David') ||
-          v.name.includes('Zira') ||
-          v.name.includes('Ravi')
+        candidates.find((v) => v.name.toLowerCase().includes('tara')) ||
+        candidates.find((v) => v.name.toLowerCase().includes('samantha')) ||
+        candidates.find((v) =>
+          v.name.toLowerCase().includes('victoria') ||
+          v.name.toLowerCase().includes('karen') ||
+          v.name.toLowerCase().includes('tessa') ||
+          v.name.toLowerCase().includes('veena') ||
+          v.name.toLowerCase().includes('google us english') ||
+          v.name.toLowerCase().includes('google uk english female')
         ) ||
-        voices.find((v) => v.lang.startsWith('en')) ||
-        voices[0];
+        candidates.find((v) => v.lang === 'en-IN' && !isBanned(v)) ||
+        candidates.find((v) => v.lang.startsWith('en') && !isBanned(v)) ||
+        candidates[0];
 
       if (preferred) {
         utterance.voice = preferred;
@@ -427,13 +485,65 @@ export function useKyronVoice({
     }
   }, [playChime, speak]);
 
-  // Silence Auto-Submit Timer
-  const resetSilenceTimer = useCallback(() => {
+  // External notification helper: Mute mic and drop self-echo when assistant speaks (Dograh or Web Speech)
+  const notifyAssistantSpeaking = useCallback((phrase, durationMs) => {
+    if (phrase) {
+      const clean = cleanTextForSpeech(phrase);
+      recentSpokenPhrasesRef.current.push({
+        text: clean,
+        time: Date.now()
+      });
+      if (recentSpokenPhrasesRef.current.length > 20) {
+        recentSpokenPhrasesRef.current.shift();
+      }
+    }
+
+    setIsSpeaking(true);
+    isSpeakingRef.current = true;
+    isMutedDuringTTSRef.current = true;
+
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+    latestTranscriptRef.current = '';
+    setTranscript('');
+    setLiveTranscript('');
+    if (onTranscriptChangeRef.current) {
+      onTranscriptChangeRef.current('');
+    }
+
+    if (recognitionRef.current && isRecognitionRunningRef.current) {
+      try {
+        recognitionRef.current.abort();
+        isRecognitionRunningRef.current = false;
+      } catch (_) {}
+    }
+
+    const words = phrase ? phrase.split(/\s+/).length : 6;
+    const estDuration = durationMs || Math.max(2500, (words / 2.0) * 1000);
+
+    if (ttsCooldownTimerRef.current) clearTimeout(ttsCooldownTimerRef.current);
+    ttsCooldownTimerRef.current = setTimeout(() => {
+      setIsSpeaking(false);
+      isSpeakingRef.current = false;
+      isMutedDuringTTSRef.current = false;
+      latestTranscriptRef.current = '';
+      if (!isIntentionalStopRef.current && isListeningRef.current) {
+        safeStartRecognition();
+      }
+    }, estDuration + 1000);
+  }, [safeStartRecognition]);
+
+  // Fast & Snappy Silence Auto-Submit Timer
+  const resetSilenceTimer = useCallback((customDelay) => {
     if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+
+    const delay = customDelay || 800;
 
     silenceTimerRef.current = setTimeout(() => {
       const pendingText = latestTranscriptRef.current.trim();
-      // Drop if it matches Kyron's recently spoken words
+      // Drop if it matches Kyron's recently spoken words (Echo Shield)
       if (isKyronEcho(pendingText, recentSpokenPhrasesRef.current)) {
         console.log('[KYRON ECHO SHIELD] Blocked pending submission matching Kyron speech:', pendingText);
         latestTranscriptRef.current = '';
@@ -442,7 +552,21 @@ export function useKyronVoice({
         return;
       }
 
-      if (pendingText.length > 1) {
+      const now = Date.now();
+      // Drop if exact same phrase was already submitted within last 3.0 seconds
+      if (
+        now - lastSubmittedPhraseRef.current.time < 3000 &&
+        lastSubmittedPhraseRef.current.text.toLowerCase() === pendingText.toLowerCase()
+      ) {
+        console.log('[KYRON] Dropped duplicate submission:', pendingText);
+        latestTranscriptRef.current = '';
+        setTranscript('');
+        setLiveTranscript('');
+        return;
+      }
+
+      if (pendingText.length >= 3) {
+        lastSubmittedPhraseRef.current = { text: pendingText, time: now };
         setIsSpeaking(false);
         isSpeakingRef.current = false;
 
@@ -459,8 +583,15 @@ export function useKyronVoice({
         setIsWakeWordActive(false);
         isWakeWordActiveRef.current = false;
         setAudioLevel(0);
+
+        // Abort to reset recognition buffer for the next sentence
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.abort();
+          } catch (_) {}
+        }
       }
-    }, 1250);
+    }, delay);
   }, [playChime]);
 
   // Initialize Hardware Auto-Gain Control (AGC) & Live Equalizer
@@ -566,7 +697,7 @@ export function useKyronVoice({
     }
 
     const recognition = new SpeechRec();
-    recognition.continuous = false;
+    recognition.continuous = true; // Continuous listening so user can complete whole sentences without cut-off
     recognition.interimResults = true;
     recognition.lang = selectedLanguage;
     recognition.maxAlternatives = 5; // More alternatives help detect whispered/soft speech
@@ -583,19 +714,37 @@ export function useKyronVoice({
         return;
       }
 
-      let interim = '';
-      let final = '';
+      let fullTranscript = '';
+      let isLastFinal = false;
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // Accumulate sentence and inspect alternatives for known Indian Hindi/English intent terms
+      for (let i = 0; i < event.results.length; i++) {
         const item = event.results[i];
-        if (item.isFinal) {
-          final += item[0].transcript;
-        } else {
-          interim += item[0].transcript;
+        let chosen = item[0]?.transcript || '';
+
+        // Check if secondary alternatives contain high-confidence intended phrases
+        for (let a = 0; a < item.length; a++) {
+          const altText = (item[a]?.transcript || '').toLowerCase();
+          if (
+            altText.includes('pan card') ||
+            altText.includes('pancard') ||
+            altText.includes('passport') ||
+            altText.includes('ticket') ||
+            altText.includes('whatsapp')
+          ) {
+            chosen = item[a].transcript;
+            break;
+          }
+        }
+
+        fullTranscript += chosen + ' ';
+        if (i === event.results.length - 1 && item.isFinal) {
+          isLastFinal = true;
         }
       }
 
-      const currentSpeech = (final || interim).trim();
+      const rawSpeech = fullTranscript.replace(/\s+/g, ' ').trim();
+      const currentSpeech = normalizeSpeechPhonetics(rawSpeech);
       if (!currentSpeech) return;
 
       // 2. Echo Shield: If transcript matches Kyron's recently spoken output, DROP IT!
@@ -604,19 +753,46 @@ export function useKyronVoice({
         return;
       }
 
-      // 3. Wake-word detection
+      // 3. Wake-word detection (e.g. 'Hey Kyron', 'Hey Kyon', 'Suno Kyron')
       if (!isWakeWordActiveRef.current && isFuzzyWakeWord(currentSpeech)) {
-        triggerWakeup();
+        // Strip wake-words to check if the user spoke a command in the same breath
+        const stripped = currentSpeech
+          .replace(WAKE_REGEX, '')
+          .replace(/^[,\.\-!\?\s]+|[,\.\-!\?\s]+$/g, '')
+          .trim();
 
-        const stripped = currentSpeech.replace(WAKE_REGEX, '').trim();
-        if (stripped.length >= 2) {
+        const alphaNumericChars = stripped.replace(/[^a-zA-Z0-9]/g, '');
+
+        if (alphaNumericChars.length >= 3 && !isFuzzyWakeWord(stripped)) {
+          // User said wake-word AND instruction together (e.g. "Hey Kyron open Chrome" or "Hey Kyon good morning")
+          // DO NOT call triggerWakeup() which would vocalize a greeting and overlap with the command!
+          setIsWakeWordActive(true);
+          isWakeWordActiveRef.current = true;
+          hasUserInteractedRef.current = true;
+          playChime('activate');
+
           latestTranscriptRef.current = stripped;
           setTranscript(stripped);
           setLiveTranscript(stripped);
           if (onTranscriptChangeRef.current) {
             onTranscriptChangeRef.current(stripped);
           }
-          resetSilenceTimer();
+          resetSilenceTimer(750);
+        } else {
+          // Pure wake trigger (e.g. "Hey Kyon", "Hey Kyron"): DO NOT send to chat!
+          // Clear any pending transcript & silence timer so wake word is never submitted.
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }
+          latestTranscriptRef.current = '';
+          setTranscript('');
+          setLiveTranscript('');
+          if (onTranscriptChangeRef.current) {
+            onTranscriptChangeRef.current('');
+          }
+          // Only trigger wake vocalization when it's purely a wake call without a directive
+          triggerWakeup();
         }
         return;
       }
@@ -630,7 +806,8 @@ export function useKyronVoice({
         onTranscriptChangeRef.current(currentSpeech);
       }
 
-      resetSilenceTimer();
+      // Snappy responsiveness: 750ms when browser marks end of phrase; 1100ms for natural mid-sentence pauses
+      resetSilenceTimer(isLastFinal ? 750 : 1100);
     };
 
     recognition.onerror = (e) => {
@@ -744,6 +921,7 @@ export function useKyronVoice({
     toggleMute,
     activateVoice,
     triggerWakeup,
-    playChime
+    playChime,
+    notifyAssistantSpeaking
   };
 }
